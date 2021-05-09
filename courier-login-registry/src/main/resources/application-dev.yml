@@ -1,0 +1,87 @@
+
+# 开发环境配置文件
+server:
+  port: 20001
+
+spring:
+  shardingsphere:
+    # 数据库配置 -- 写数据库
+    datasource:
+      names: write-database
+      write-database:
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        type: com.alibaba.druid.pool.DruidDataSource
+        url: jdbc:mysql://127.0.0.1:3306/meituan_courier?characterEncoding=utf-8
+        username: root
+        password: root130626
+        # 配置 druid 连接池
+        druid:
+          # 初始化大小
+          initial-size: 8
+          # 最小空闲数
+          min-idle: 16
+          # 连接池中的 minIdle 数据以内的连接，空闲时间超过设置的 最小生存时间时, 会执行 keepAlive 操作。默认 false
+          keep-alive: true
+          # 最大活跃数
+          max-active: 32
+          # 获取连接的等待时间
+          max-wait: 10000
+          # 间隔多长时间 检测是否关闭空闲连接 单位毫秒
+          time-between-eviction-runs-millis: 2000
+          # 控制一个连接在资源池中 最大和最小的生存时间 单位毫秒
+          min-evictable-idle-time-millis: 600000
+          max-evictable-idle-time-millis: 900000
+          # 获取连接时，使用这个 SQL 语句，检测连接是否可用
+          validation-query: SELECT 1 FROM sys_user
+          # 申请连接的时候检测连接是否可用。默认值是 false，建议配置为 true，不影响性能，并且保证安全性。如果空闲时间大于 timeBetweenEvictionRunsMillis, 执行 validationQuery 检测连接是否有效
+          test-while-idle: true
+          # 申请连接时执行 validationQuery 检测连接是否有效，会降低性能（生产环境中一般不会开启）, 默认值为 true, 建议 false
+          test-on-borrow: false
+          # 归还连接时执行 validationQuery 检测连接是否有效，会降低性能（生产环境中一般不会开启）, 默认值为 false, 建议 false
+          test-on-return: false
+          # 是否缓存 preparedStatement, 默认值为 false, 也就是 PSCache。PSCache 对支持游标的数据库性能提升巨大。 mysql5.5以下建议 false
+          filter: true
+
+    props:
+      sql.show: true
+    masterslave:
+      load-balance-algorithm-type: round_robin # 轮询
+    sharding:
+      master-slave-rules:
+        master:
+          master-data-source-name: write-database
+          slave-data-source-names: write-database
+
+  # REDIS 配置
+  redis:
+    host: 192.168.43.206
+    port: 6379
+    jedis:
+      pool:
+        # 最大活跃数
+        max-active: 70
+        # 最小空闲连接数
+        min-idle: 30
+        # 最大空闲连接数
+        max-idle: 50
+        # 等待时间
+        max-wait: 8000
+        # 多久进行一次周期性检测
+        time-between-eviction-runs: 30000
+    timeout: 60000
+
+  # rabbitMQ 配置
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true  # 开启数据库中命名的下划线和小驼峰的转化。
+# dubbo 配置
+dubbo:
+  registry:
+    address: zookeeper://127.0.0.1:2181
