@@ -43,7 +43,7 @@ public class CookieManagement {
      * @param redisMapKey redisMap key
      * @return 返回 cookie
      */
-    public Object getLoginSeller(HttpServletRequest request, String cookieKey, String redisMapKey) {
+    public Object getLoginCourier(HttpServletRequest request, String cookieKey, String redisMapKey) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null && cookies.length != 0) {
             for (Cookie cookie : cookies) {

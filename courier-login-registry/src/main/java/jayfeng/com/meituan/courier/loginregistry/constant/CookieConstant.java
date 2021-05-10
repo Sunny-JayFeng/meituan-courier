@@ -7,7 +7,7 @@ package jayfeng.com.meituan.courier.loginregistry.constant;
  */
 public enum CookieConstant {
 
-    SELLER_KEY("selleruuid"),
+    COURIER_KEY("courieruuid"),
 
 //    DO_MAIN("mymeituan.com"),
     DO_MAIN("127.0.0.1"),

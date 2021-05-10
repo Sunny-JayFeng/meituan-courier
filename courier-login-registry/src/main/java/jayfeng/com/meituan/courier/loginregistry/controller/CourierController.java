@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 /**
@@ -21,6 +23,51 @@ public class CourierController extends BaseController {
 
     @Autowired
     private CourierService courierService;
+
+    /**
+     * 通过手机验证码登录
+     * @param paramsMap phone - identifyCode
+     * @return 返回
+     */
+    @PostMapping("/loginByCode")
+    public ResponseMessage loginByCode(@RequestBody Map<String, String> paramsMap, HttpServletResponse response) {
+        log.info("loginByCode 通过手机验证码登录 paramsMap: {}", paramsMap);
+        return requestSuccess(courierService.loginByCode(paramsMap, response));
+    }
+
+    /**
+     * 通过密码登录
+     * @param paramsMap phone - password
+     * @return 返回
+     */
+    @PostMapping("/loginByPassword")
+    public ResponseMessage loginByPassword(@RequestBody Map<String, String> paramsMap, HttpServletResponse response) {
+        log.info("loginByPassword 通过密码登录 paramsMap: {}", paramsMap);
+        return requestSuccess(courierService.loginByPassword(paramsMap, response));
+    }
+
+    /**
+     * 骑手退出登录
+     * @param request 请求
+     * @param response 响应
+     * @return 返回
+     */
+    @PutMapping("/courierLogout")
+    public ResponseMessage courierLogout(HttpServletRequest request, HttpServletResponse response) {
+        log.info("logout 骑手退出登录");
+        return requestSuccess(courierService.courierLogout(request, response));
+    }
+
+    /**
+     * 获取短信验证码
+     * @param phone 手机号
+     * @return 返回验证码
+     */
+    @GetMapping("/getIdentifyCode/{phone}")
+    public ResponseMessage getIdentifyCode(@PathVariable("phone") String phone) {
+        log.info("getIdentifyCode 获取短信验证码 phone: {}", phone);
+        return requestSuccess(courierService.getIdentifyCode(phone));
+    }
 
     /**
      * 检查手机号是否已被注册
@@ -57,13 +104,14 @@ public class CourierController extends BaseController {
 
     /**
      * 骑手注册
+     * @param identifyCode 验证码
      * @param courier 骑手
      * @return 返回
      */
-    @PostMapping("/courierRegistry")
-    public ResponseMessage courierRegistry(@RequestBody Courier courier) {
-        log.info("courierRegistry 骑手注册 courier: {}", courier);
-        return requestSuccess(courierService.courierRegistry(courier));
+    @PostMapping("/courierRegistry/{identifyCode}")
+    public ResponseMessage courierRegistry(@PathVariable("identifyCode") String identifyCode, @RequestBody Courier courier) {
+        log.info("courierRegistry 骑手注册 identifyCode: {}, courier: {}", identifyCode, courier);
+        return requestSuccess(courierService.courierRegistry(identifyCode, courier));
     }
 
     /**
@@ -116,6 +164,19 @@ public class CourierController extends BaseController {
     public ResponseMessage findCourierByPhone(@PathVariable("phone") String phone) {
         log.info("findCourierByPhone 通过手机号查找骑手信息 phone: {}", phone);
         return requestSuccess(courierService.findCourierByPhone(phone));
+    }
+
+    /**
+     * 设置骑手是否有效
+     * @param paramsMap 参数
+     * phone -- 手机号
+     * isValid -- 是否有效
+     * @return 返回
+     */
+    @PutMapping("/setCourierIsValid")
+    public ResponseMessage setCourierIsValid(@RequestBody Map<String, String> paramsMap) {
+        log.info("setCourierIsValid 修改骑手是否有效状态 paramsMap: {}", paramsMap);
+        return requestSuccess(courierService.setCourierIsValid(paramsMap));
     }
 
 }

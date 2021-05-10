@@ -1,10 +1,15 @@
 package jayfeng.com.meituan.courier.loginregistry.service.impl;
 
+import com.google.gson.Gson;
 import jayfeng.com.meituan.courier.loginregistry.bean.Courier;
+import jayfeng.com.meituan.courier.loginregistry.constant.CookieConstant;
+import jayfeng.com.meituan.courier.loginregistry.constant.RedisConstant;
 import jayfeng.com.meituan.courier.loginregistry.dao.CourierDao;
 import jayfeng.com.meituan.courier.loginregistry.exception.RequestForbiddenException;
+import jayfeng.com.meituan.courier.loginregistry.redis.RedisService;
 import jayfeng.com.meituan.courier.loginregistry.response.ResponseData;
 import jayfeng.com.meituan.courier.loginregistry.service.CourierService;
+import jayfeng.com.meituan.courier.loginregistry.util.CookieManagement;
 import jayfeng.com.meituan.courier.loginregistry.util.EncryptUtil;
 import jayfeng.com.meituan.courier.loginregistry.util.IdentifyCodeManagement;
 import jayfeng.com.meituan.courier.loginregistry.util.PatternMatch;
@@ -13,7 +18,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ObjectUtils;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 骑手登录注册业务层
@@ -29,9 +37,112 @@ public class CourierServiceImpl implements CourierService {
     @Autowired
     private IdentifyCodeManagement identifyCodeManagement;
     @Autowired
+    private CookieManagement cookieManagement;
+    @Autowired
     private PatternMatch patternMatch;
     @Autowired
     private EncryptUtil encryptUtil;
+    @Autowired
+    private RedisService redisService;
+
+    private Gson gson = new Gson();
+
+    /**
+     * 通过手机验证码登录
+     * @param paramsMap phone - identifyCode
+     * @return 返回
+     */
+    @Override
+    public ResponseData loginByCode(Map<String, String> paramsMap, HttpServletResponse response) {
+        String phone = paramsMap.get("phone");
+        String identifyCode = paramsMap.get("identifyCode");
+        if (ObjectUtils.isEmpty(phone) || !patternMatch.isPhone(phone) || ObjectUtils.isEmpty(identifyCode)) {
+            throw new RequestForbiddenException("您无权访问该服务");
+        }
+        Courier courier = courierDao.selectOneByPhone(phone);
+        if (courier == null) {
+            log.info("loginByCode 登录失败 骑手不存在");
+            return ResponseData.createFailResponseData("loginByCodeInfo", false, "骑手未注册", "courier_never_registry");
+        }
+        if (checkIdentifyCode(phone, identifyCode)) {
+            log.info("loginByCode 登录成功 courier: {}", courier);
+            courier.setPassword(null);
+            setCookie(response, courier);
+            identifyCodeManagement.removeIdentifyCode(phone);
+            return ResponseData.createSuccessResponseData("loginByCodeInfo", courier);
+        } else {
+            log.info("loginByCode 登录失败");
+            return ResponseData.createFailResponseData("loginByCodeInfo", false, "验证码错误", "identify_code_error");
+        }
+    }
+
+    /**
+     * 检查验证码是否正确
+     * @param phone 手机号
+     * @param identifyCode 验证码
+     * @return
+     */
+    private boolean checkIdentifyCode(String phone, String identifyCode) {
+        String realIdentifyCode = identifyCodeManagement.getIdentifyCode(phone);
+        boolean result = identifyCode.equals(realIdentifyCode);
+        log.info("checkIdentifyCode 验证码校验结果 result: {}, phone: {}, identifyCode: {}, realIdentifyCode: {}", result, phone, identifyCode, realIdentifyCode);
+        return result;
+    }
+
+    /**
+     * 通过密码登录
+     * @param paramsMap phone - password
+     * @return 返回
+     */
+    @Override
+    public ResponseData loginByPassword(Map<String, String> paramsMap, HttpServletResponse response) {
+        String phone = paramsMap.get("phone");
+        String password = paramsMap.get("password");
+        if (ObjectUtils.isEmpty(phone) || !patternMatch.isPhone(phone) ||
+            ObjectUtils.isEmpty(password) || !patternMatch.checkPassword(password)) {
+            throw new RequestForbiddenException("您无权访问该服务");
+        }
+        Courier courier = courierDao.selectOneByPhone(phone);
+        if (courier == null) {
+            log.info("loginByPassword 登录失败 骑手不存在");
+            return ResponseData.createFailResponseData("loginByPasswordInfo", false, "骑手未注册", "courier_never_registry");
+        }
+        if (encryptUtil.matches(password, courier.getPassword())) {
+            log.info("loginByPassword 登录成功 courier: {}", courier);
+            courier.setPassword(null);
+            setCookie(response, courier);
+            return ResponseData.createSuccessResponseData("loginByPasswordInfo", courier);
+        } else {
+            log.info("loginByPassword 登录失败, 密码错误");
+            return ResponseData.createFailResponseData("loginByPasswordInfo", false, "登录失败, 密码错误", "password_error");
+        }
+    }
+
+    /**
+     * 骑手退出登录
+     * @param request 请求
+     * @param response 响应
+     * @return 返回
+     */
+    @Override
+    public ResponseData courierLogout(HttpServletRequest request, HttpServletResponse response) {
+        String uuid = cookieManagement.removeCookie(response, request, CookieConstant.COURIER_KEY.getCookieKey());
+        redisService.deleteCourierUUID(RedisConstant.COURIER_UUID_MAP.getRedisMapKey(), uuid);
+        log.info("courierLogout 骑手退出登录成功 uuid: {}", uuid);
+        return ResponseData.createSuccessResponseData("courierLogoutInfo", true);
+    }
+
+    /**
+     * 设置 cookie
+     * @param response 响应
+     * @param courier 骑手
+     */
+    private void setCookie(HttpServletResponse response, Courier courier) {
+        String uuid = UUID.randomUUID().toString();
+        log.info("setCookie 设置cookie uuid: {}", uuid);
+        cookieManagement.setCookie(response, CookieConstant.COURIER_KEY.getCookieKey(), uuid);
+        redisService.addCourierUUID(RedisConstant.COURIER_UUID_MAP.getRedisMapKey(), uuid, gson.toJson(courier));
+    }
 
     /**
      * 检查手机号是否已被注册
@@ -80,11 +191,12 @@ public class CourierServiceImpl implements CourierService {
 
     /**
      * 骑手注册
+     * @param identifyCode 验证码
      * @param courier 骑手
      * @return 返回
      */
     @Override
-    public ResponseData courierRegistry(Courier courier) {
+    public ResponseData courierRegistry(String identifyCode, Courier courier) {
         String phone = courier.getPhone();
         String password = courier.getPassword();
         String email = courier.getEmail();
@@ -95,12 +207,21 @@ public class CourierServiceImpl implements CourierService {
             ObjectUtils.isEmpty(idCard) || !patternMatch.isIdCard(idCard) || courierDao.selectOneByIdCard(idCard) != null) {
             throw new RequestForbiddenException("您无权访问该服务");
         }
-        courier.setPassword(encryptUtil.encrypt(courier.getPassword()));
-        courier.setIsValid((byte) 1);
-        courier.setCreateTime(System.currentTimeMillis());
-        courier.setUpdateTime(courier.getCreateTime());
-        courierDao.insertCourier(courier);
-        return ResponseData.createSuccessResponseData("courierRegistryInfo", true);
+        String realIdentifyCode = identifyCodeManagement.getIdentifyCode(phone);
+        if (identifyCode.equals(realIdentifyCode)) {
+            courier.setPassword(encryptUtil.encrypt(courier.getPassword()));
+            courier.setIsValid((byte) 1);
+            courier.setCreateTime(System.currentTimeMillis());
+            courier.setUpdateTime(courier.getCreateTime());
+            courierDao.insertCourier(courier);
+            log.info("courierRegistry 注册成功 courier: {}", courier);
+            identifyCodeManagement.removeIdentifyCode(phone);
+            return ResponseData.createSuccessResponseData("courierRegistryInfo", true);
+        } else {
+            log.info("courierRegistry 注册失败, 验证码错误 identifyCode: {}, realIdentifyCode: {}", identifyCode, realIdentifyCode);
+            return ResponseData.createFailResponseData("courierRegistryInfo", false, "验证码错误", "identify_code_error");
+        }
+
     }
 
     /**
@@ -175,7 +296,9 @@ public class CourierServiceImpl implements CourierService {
             ObjectUtils.isEmpty(birthday) || !patternMatch.isBirthday(birthday)) {
             throw new RequestForbiddenException("您无权访问该服务");
         }
-        return null;
+        courierDao.updateCourierBirthday(courier.getId(), birthday, System.currentTimeMillis());
+        log.info("courierChangeBirthday 修改生日成功 old: {}, new: {}", courier.getBirthday(), birthday);
+        return ResponseData.createSuccessResponseData("courierChangeBirthdayInfo", true);
     }
 
     /**
@@ -220,7 +343,22 @@ public class CourierServiceImpl implements CourierService {
         if (ObjectUtils.isEmpty(phone) || !patternMatch.isPhone(phone)) throw new RequestForbiddenException("您无权访问该服务");
         Courier courier = courierDao.selectOneByPhone(phone);
         log.info("findCourierByPhone 通过手机号查找骑手信息 courier: {}", courier);
+        courier.setPassword(null);
         return ResponseData.createSuccessResponseData("findCourierByPhoneInfo", courier);
+    }
+
+    /**
+     * 获取短信验证码
+     * @param phone 手机号
+     * @return 返回
+     */
+    @Override
+    public ResponseData getIdentifyCode(String phone) {
+        if (ObjectUtils.isEmpty(phone) || !patternMatch.isPhone(phone)) throw new RequestForbiddenException("您无权访问该服务");
+        String identifyCode = identifyCodeManagement.getIdentifyCode(phone);
+        identifyCodeManagement.sendIdentifyCode(phone, identifyCode);
+        log.info("getIdentifyCode 获取短信验证码 phone: {}, identifyCode: {}", phone, identifyCode);
+        return ResponseData.createSuccessResponseData("getIdentifyCodeInfo", identifyCode);
     }
 
 }

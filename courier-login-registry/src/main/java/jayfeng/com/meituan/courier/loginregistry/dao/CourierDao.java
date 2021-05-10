@@ -66,7 +66,7 @@ public interface CourierDao {
      * @param phone 手机号
      * @return 返回骑手信息
      */
-    @Select("SELECT `name`, `birthday`, `phone`, `email`, `received_orders`, `time_out_times`, `praise_times`, `negative_comment_times` " +
+    @Select("SELECT `name`, `birthday`, `phone`, `password`, `email`, `received_orders`, `time_out_times`, `praise_times`, `negative_comment_times` " +
             "FROM courier WHERE `phone` = #{phone}")
     Courier selectOneByPhone(@Param("phone") String phone);
 
